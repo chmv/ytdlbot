@@ -33,7 +33,36 @@ every one can use this bot within **{sizeof_fmt(QUOTA)} of quota for every {int(
 4. You can optionally choose to become 'VIP' user if you need more traffic. Type /vip for more information.
 
 5. Source code for this bot will always stay open, here-> https://github.com/tgbot-collection/ytdlbot
-    """ if ENABLE_VIP else "Help text"
+    """ if ENABLE_VIP else """
+Help
+/start - Let's start
+/about - What's this bot?
+/help - Help
+/ytdl - Download video in group
+/terms - View Terms of Service
+/settings - Set your preference
+/direct - Download file directly
+/sub - Subscribe to YouTube Channel
+/unsub - Unsubscribe from YouTube Channel
+/sub_count - Check subscription status, owner only.
+/uncache - Delete cache for this link
+"""
+
+#Help
+#/start - Let's start
+#/about - What's this bot?
+#/ping - Bot running status
+#/help - Help
+#/ytdl - Download video in group
+#/vip - Join VIP
+#/terms - View Terms of Service
+#/settings - Set your preference
+#/direct - Download file directly
+#/sub - Subscribe to YouTube Channel
+#/unsub - Unsubscribe from YouTube Channel
+#/sub_count - Check subscription status, owner only.
+#/uncache - Delete cache for this link
+
 
     about = "YouTube-DL by @BennyThink. Open source on GitHub: https://github.com/tgbot-collection/ytdlbot"
 
