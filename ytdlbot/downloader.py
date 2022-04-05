@@ -112,7 +112,8 @@ def upload_hook(current, total, bot_msg):
     edit_text(bot_msg, text)
 
 
-def check_quota(file_size, chat_id) -> ("bool", "str"):
+#def check_quota(file_size, chat_id) -> ("bool", "str"):
+def check_quota(file_size, chat_id):
     remain, _, ttl = VIP().check_remaining_quota(chat_id)
     if file_size > remain:
         refresh_time = current_time(ttl + time.time())
@@ -188,13 +189,24 @@ def ytdl_download(url, tempdir, bm, **kwargs) -> dict:
     chat_id = bm.chat.id
     hijack = kwargs.get("hijack")
     response = {"status": True, "error": "", "filepath": []}
-    output = pathlib.Path(tempdir, "%(title).70s.%(ext)s").as_posix()
+    #output = pathlib.Path(tempdir, "%(title).70s.%(ext)s").as_posix()
+    output = pathlib.Path(tempdir, "%(title)s [%(id)s].%(ext)s").as_posix()
+    #For sorted playlists
+    #output = pathlib.Path(tempdir, "[%(playlist_count-playlist_index)03d] %(title)s [%(id)s].%(ext)s").as_posix()
+    #output = pathlib.Path(tempdir, "[%(playlist_index)03d] %(title)s [%(id)s].%(ext)s").as_posix()
+    #output = pathlib.Path(tempdir, "%(title)s-%(id)s.%(ext)s").as_posix()
+    #output = pathlib.Path(tempdir, "%(title)s UD[%(upload_date>%Y-%m-%d %H-%M-%S)s] RD[%(release_date>%Y-%m-%d %H-%M-%S)s] MD[%(release_date>%Y-%m-%d %H-%M-%S)s].%(ext)s").as_posix()
+    logging.info("Download filepath: %s", output)
     ydl_opts = {
         'progress_hooks': [lambda d: download_hook(d, bm)],
         'outtmpl': output,
         'restrictfilenames': False,
         'quiet': True,
-        "proxy": os.getenv("YTDL_PROXY")
+        "proxy": os.getenv("YTDL_PROXY"),
+        'no_warnings': True,
+        'compat_opts': "no-youtube-unavailable-videos",
+        'writeinfojson': True,
+        #'writedescription': True,
     }
     formats = [
         "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio",
@@ -202,6 +214,8 @@ def ytdl_download(url, tempdir, bm, **kwargs) -> dict:
         None
     ]
     adjust_formats(chat_id, url, formats, hijack)
+
+    ydl_opts["cookiefile"] = pathlib.Path(__file__).parent.joinpath("cookies.txt").as_posix()
     add_instagram_cookies(url, ydl_opts)
 
     address = ["::", "0.0.0.0"] if IPv6 else [None]
@@ -231,6 +245,12 @@ def ytdl_download(url, tempdir, bm, **kwargs) -> dict:
 
     for i in os.listdir(tempdir):
         p = pathlib.Path(tempdir, i)
+        # read info from JSON file and forget about file
+        if pathlib.Path(p).suffix == ".json":
+            continue
+        # ignore *.description files
+        if pathlib.Path(p).suffix == ".description":
+            continue
         file_size = os.stat(p).st_size
         if ENABLE_VIP:
             remain, _, ttl = VIP().check_remaining_quota(chat_id)

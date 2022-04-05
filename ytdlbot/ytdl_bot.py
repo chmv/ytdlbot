@@ -31,12 +31,18 @@ from db import InfluxDB, MySQL, Redis
 from limit import VIP, verify_payment
 from tasks import app as celery_app
 from tasks import (audio_entrance, direct_download_entrance, hot_patch,
-                   ytdl_download_entrance)
+                   ytdl_download_entrance, gen_userinfo)
 from utils import (auto_restart, customize_logger, get_revision,
                    get_user_settings, set_user_settings)
 
 customize_logger(["pyrogram.client", "pyrogram.session.session", "pyrogram.connection.connection"])
 logging.getLogger('apscheduler.executors.default').propagate = False
+
+logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+
+fileHandler = logging.FileHandler("{0}/{1}.log".format("/var/log/ytdlbot/", "ytdlbot"))
+fileHandler.setFormatter(logFormatter)
+logging.getLogger().addHandler(fileHandler)
 
 app = create_app()
 bot_text = BotText()
@@ -46,6 +52,7 @@ logging.info("Authorized users are %s", AUTHORIZED_USER)
 
 def private_use(func):
     def wrapper(client: "Client", message: "types.Message"):
+        logging.info("{private} : %s", gen_userinfo(message.from_user))
         chat_id = getattr(message.from_user, "id", None)
 
         # message type check
@@ -80,8 +87,10 @@ def private_use(func):
 
 @app.on_message(filters.command(["start"]))
 def start_handler(client: "Client", message: "types.Message"):
+    user_info = gen_userinfo(message.from_user)
+    logging.info("/start : %s", user_info)
     from_id = message.from_user.id
-    logging.info("Welcome to youtube-dl bot!")
+    logging.info("Welcome to youtube-dl bot, %s!", user_info)
     client.send_chat_action(from_id, "typing")
     greeting = bot_text.get_vip_greeting(from_id)
     quota = bot_text.remaining_quota_caption(from_id)
@@ -93,6 +102,7 @@ def start_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["help"]))
 def help_handler(client: "Client", message: "types.Message"):
+    logging.info("/help : %s", gen_userinfo(message.from_user))
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
     client.send_message(chat_id, bot_text.help, disable_web_page_preview=True)
@@ -100,6 +110,7 @@ def help_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["sub"]))
 def subscribe_handler(client: "Client", message: "types.Message"):
+    logging.info("/subscribe : %s", gen_userinfo(message.from_user))
     vip = VIP()
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
@@ -116,6 +127,7 @@ def subscribe_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["unsub"]))
 def unsubscribe_handler(client: "Client", message: "types.Message"):
+    logging.info("/unsubscribe : %s", gen_userinfo(message.from_user))
     vip = VIP()
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
@@ -134,6 +146,7 @@ def unsubscribe_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["patch"]))
 def patch_handler(client: "Client", message: "types.Message"):
+    logging.info("/patch : %s", gen_userinfo(message.from_user))
     username = message.from_user.username
     chat_id = message.chat.id
     if username == OWNER:
@@ -144,7 +157,8 @@ def patch_handler(client: "Client", message: "types.Message"):
 
 
 @app.on_message(filters.command(["uncache"]))
-def patch_handler(client: "Client", message: "types.Message"):
+def uncache_handler(client: "Client", message: "types.Message"):
+    logging.info("/uncache : %s", gen_userinfo(message.from_user))
     username = message.from_user.username
     link = message.text.split()[1]
     if username == OWNER:
@@ -154,6 +168,7 @@ def patch_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["ping"]))
 def ping_handler(client: "Client", message: "types.Message"):
+    logging.info("/ping : %s", gen_userinfo(message.from_user))
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
     if os.uname().sysname == "Darwin" or ".heroku" in os.getenv("PYTHONHOME", ""):
@@ -169,6 +184,7 @@ def ping_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["about"]))
 def help_handler(client: "Client", message: "types.Message"):
+    logging.info("/about : %s", gen_userinfo(message.from_user))
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
     client.send_message(chat_id, bot_text.about)
@@ -176,6 +192,7 @@ def help_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["terms"]))
 def terms_handler(client: "Client", message: "types.Message"):
+    logging.info("/terms : %s", gen_userinfo(message.from_user))
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
     client.send_message(chat_id, bot_text.terms)
@@ -183,6 +200,7 @@ def terms_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["sub_count"]))
 def sub_count_handler(client: "Client", message: "types.Message"):
+    logging.info("/sub_count : %s", gen_userinfo(message.from_user))
     username = message.from_user.username
     chat_id = message.chat.id
     if username == OWNER:
@@ -194,6 +212,7 @@ def sub_count_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["direct"]))
 def direct_handler(client: "Client", message: "types.Message"):
+    logging.info("/direct : %s", gen_userinfo(message.from_user))
     chat_id = message.from_user.id
     client.send_chat_action(chat_id, "typing")
     url = re.sub(r'/direct\s*', '', message.text)
@@ -210,6 +229,7 @@ def direct_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["settings"]))
 def settings_handler(client: "Client", message: "types.Message"):
+    logging.info("/settings : %s", gen_userinfo(message.from_user))
     chat_id = message.chat.id
     client.send_chat_action(chat_id, "typing")
     data = get_user_settings(str(chat_id))
@@ -242,6 +262,7 @@ def settings_handler(client: "Client", message: "types.Message"):
 
 @app.on_message(filters.command(["vip"]))
 def vip_handler(client: "Client", message: "types.Message"):
+    logging.info("/vip : %s", gen_userinfo(message.from_user))
     # process as chat.id, not from_user.id
     chat_id = message.chat.id
     text = message.text.strip()
@@ -258,6 +279,7 @@ def vip_handler(client: "Client", message: "types.Message"):
 @app.on_message(filters.incoming & filters.text)
 @private_use
 def download_handler(client: "Client", message: "types.Message"):
+    logging.info("{message} : %s", gen_userinfo(message.from_user))
     # check remaining quota
     red = Redis()
     chat_id = message.from_user.id

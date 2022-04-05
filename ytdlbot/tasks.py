@@ -17,6 +17,8 @@ import threading
 import time
 import traceback
 import typing
+import json
+import datetime
 from hashlib import md5
 from urllib.parse import quote_plus
 
@@ -247,14 +249,17 @@ def upload_transfer_sh(bm, paths: list) -> "str":
 
 def ytdl_normal_download(bot_msg, client, url):
     chat_id = bot_msg.chat.id
-    temp_dir = tempfile.TemporaryDirectory(prefix="ytdl-")
+    temp_dir = tempfile.TemporaryDirectory(prefix="ytdl-", dir="/tempstorage")
+    logging.info("temp_dir: %s", temp_dir)
 
-    result = ytdl_download(url, temp_dir.name, bot_msg)
+    download_result = ytdl_download(url, temp_dir.name, bot_msg)
     logging.info("Download complete.")
-    if result["status"]:
+
+    if download_result["status"]:
         client.send_chat_action(chat_id, 'upload_document')
-        video_paths = result["filepath"]
         bot_msg.edit_text('Download complete. Sending now...')
+        video_paths = download_result["filepath"]
+        video_paths.sort()
         for video_path in video_paths:
             # normally there's only one video in that path...
             st_size = os.stat(video_path).st_size
@@ -266,9 +271,10 @@ def ytdl_normal_download(bot_msg, client, url):
                 return
             upload_processor(client, bot_msg, url, video_path)
         bot_msg.edit_text('Download success!✅')
+        bot_msg.delete()
     else:
         client.send_chat_action(chat_id, 'typing')
-        tb = result["error"][0:4000]
+        tb = download_result["error"][0:4000]
         bot_msg.edit_text(f"Download failed!❌\n\n```{tb}```", disable_web_page_preview=True)
 
     temp_dir.cleanup()
@@ -314,17 +320,25 @@ def upload_processor(client, bot_msg, url, vp_or_fid: "typing.Any[str, pathlib.P
     return res_msg
 
 
-def gen_cap(bm, url, video_path):
-    chat_id = bm.chat.id
-    user = bm.chat
+def gen_userinfo(user):
     try:
-        user_info = "@{}({})-{}".format(
+        user_info = "@{} ({}) - {}".format(
             user.username or "N/A",
             user.first_name or "" + user.last_name or "",
             user.id
         )
     except Exception:
         user_info = ""
+    return user_info
+
+
+def gen_cap(bm, url, video_path):
+    chat_id = bm.chat.id
+    user = bm.chat
+    user_info = gen_userinfo(user)
+
+    json_file = pathlib.Path(video_path).with_suffix(".info.json")
+    video_json_info = parse_json(json_file)
 
     if isinstance(video_path, pathlib.Path):
         meta = get_metadata(video_path)
@@ -341,9 +355,64 @@ def gen_cap(bm, url, video_path):
         )
     remain = bot_text.remaining_quota_caption(chat_id)
     worker = get_dl_source()
-    cap = f"{user_info}\n`{file_name}`\n\n{url}\n\nInfo: {meta['width']}x{meta['height']} {file_size}\t" \
-          f"{meta['duration']}s\n{remain}\n{worker}\n{bot_text.custom_text}"
+    caplog = f"{user_info} {url} Info: {meta['width']}x{meta['height']} {file_size}\t " \
+             f"{meta['duration']}s {remain} {worker} {bot_text.custom_text} `{file_name}`"
+    logging.info(caplog)
+#    cap = f"{user_info}\n`{file_name}`\n\n{url}\n\nInfo: {meta['width']}x{meta['height']} {file_size}\t" \
+#          f"{meta['duration']}s\n{remain}\n{worker}\n{bot_text.custom_text}"
+#    cap = f"`{file_name}`\n{url}\nInfo: {meta['width']}x{meta['height']} {file_size}\t" \
+#          f"{meta['duration']}s\n{remain}\n{worker}\n{bot_text.custom_text}"
+    dates = ""
+    date = video_json_info.get("upload_date_str")
+    if date != None:
+        dates = dates + f"Uploaded: {date}"
+    date = video_json_info.get("release_date_str")
+    if date != None:
+        if dates != "":
+            dates = dates + " "
+        dates = dates + f"Released: {date}"
+    date = video_json_info.get("modified_date_str")
+    if date != None:
+        if dates != "":
+            dates = dates + " "
+        dates = dates + f"Modified: {date}"
+
+    channel = video_json_info["channel"]
+    fulltitle = video_json_info["fulltitle"]
+    webpage_url = video_json_info["webpage_url"]
+    cap = f"""
+`{fulltitle}`
+{webpage_url}
+{channel}
+{dates}
+Info: {meta['width']}x{meta['height']} {file_size} \t {meta['duration']}s
+{remain}
+{worker}
+{bot_text.custom_text}
+"""
     return cap, meta
+
+# Read one of dates from JSON and convert it to the readable string
+def read_date(d, key, json_file):
+    date = json_file.get(key)
+    if date != None:
+        d[key] = date
+        d[key + "_str"] = datetime.datetime.strptime(date, '%Y%m%d').strftime('%Y-%m-%d')
+
+# Load data from JSON info file
+def parse_json(json_path):
+    with open(json_path) as f:
+        json_file = json.load(f)
+    result = {}
+    read_date(result, "upload_date", json_file)
+    read_date(result, "release_date", json_file)
+    read_date(result, "modified_date", json_file)
+    result["channel"] = json_file.get("channel", "noname")
+    result["title"] = json_file.get("title", "noname")
+    result["fulltitle"] = json_file.get("fulltitle", "noname")
+    result["webpage_url"] = json_file.get("webpage_url", "webpage_url")
+    logging.info("JSON parsed: %s", result)
+    return result
 
 
 def gen_video_markup():
