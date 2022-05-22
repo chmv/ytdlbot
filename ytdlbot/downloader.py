@@ -207,6 +207,8 @@ def ytdl_download(url, tempdir, bm, **kwargs) -> dict:
         'compat_opts': "no-youtube-unavailable-videos",
         'writeinfojson': True,
         #'writedescription': True,
+        # probably doesn't work, need more tests
+        #'source_address': "0.0.0.0",
     }
     formats = [
         "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio",
